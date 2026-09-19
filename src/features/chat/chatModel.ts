@@ -42,8 +42,8 @@ export function buildChatItems(events: AgentEventEnvelope[]): ChatItem[] {
   const tools = new Map<string, number>();
   /** run ごとの結果未着ツール（インデックス） */
   const openToolsByRun = new Map<string, Set<number>>();
-  /** 同じ run で直前に assistant_text の result.text を出したか（result の本文が重複するのを防ぐ） */
-  const lastAssistantTextByRun = new Map<string, string>();
+  /** assistant_text を出した run。result.text は最後の本文の再掲なので、本文があれば表示しない */
+  const runsWithText = new Set<string>();
 
   for (const env of events) {
     const ev = env.event;
@@ -64,7 +64,7 @@ export function buildChatItems(events: AgentEventEnvelope[]): ChatItem[] {
         } else {
           items.push({ kind: "assistant", key, text: ev.text, agent: env.agent });
         }
-        lastAssistantTextByRun.set(env.runId, ev.text);
+        runsWithText.add(env.runId);
         break;
       }
       case "thinking":
@@ -93,8 +93,8 @@ export function buildChatItems(events: AgentEventEnvelope[]): ChatItem[] {
         break;
       }
       case "result": {
-        // result.text は最後の本文と同じことが多いので、重複時は本文を省く
-        const text = ev.text && ev.text.trim() !== (lastAssistantTextByRun.get(env.runId) ?? "").trim() ? ev.text : null;
+        // 失敗時の text はエラー内容なので常に出す。成功時は本文がなかった run だけ出す
+        const text = ev.text?.trim() && (ev.is_error || !runsWithText.has(env.runId)) ? ev.text : null;
         items.push({
           kind: "result",
           key,

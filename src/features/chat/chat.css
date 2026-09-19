@@ -132,6 +132,13 @@
   font-weight: 600;
   margin-right: 8px;
 }
+.chat-error.is-warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+  background: color-mix(in srgb, var(--warn) 8%, var(--bg));
+}
+.chat-error.is-warn .chat-error-label {
+  color: var(--warn);
+}
 .chat-pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

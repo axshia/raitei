@@ -35,8 +35,8 @@ export const ChatItemView = memo(function ChatItemView({ item, running }: { item
       return <ResultLine item={item} />;
     case "error":
       return (
-        <div className="chat-row chat-error" role="alert">
-          <span className="chat-error-label">エラー</span>
+        <div className="chat-row chat-error is-warn">
+          <span className="chat-error-label">エージェントの警告</span>
           <span className="chat-pre">{item.message}</span>
         </div>
       );
