@@ -12,7 +12,7 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <header className="sidebar-header">
+      <header className="sidebar-header" data-tauri-drag-region="deep">
         <span className="brand">raitei</span>
         <AddProjectButtons />
       </header>

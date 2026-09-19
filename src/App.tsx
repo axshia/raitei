@@ -5,8 +5,11 @@
  * - 復元したタブのうち存在しないタスクのものは閉じる
  * - 非アクティブなタブもアンマウントせず hidden で保持（会話のスクロール位置・入力中テキストを維持）
  * - ショートカット: ⌘1〜9 タブ切替 / ⌘⇧[ ⌘⇧] 左右のタブ / ⌃1〜4 サブビュー切替
+ * - macOS はタイトルバーを Overlay にしているため、最上段（サイドバー見出し + タスクタブ）をヘッダーとして
+ *   信号機ボタンの分だけ左を空ける。フルスクリーン中は信号機が消えるので余白を外す
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Sidebar } from "./components/layout/Sidebar";
 import { TaskTabs } from "./components/layout/TaskTabs";
 import { SUB_VIEWS } from "./components/layout/SubViewTabs";
@@ -39,6 +42,38 @@ function useStartup() {
     if (lists.length < projectCount) return;
     useTabStore.getState().pruneTabs(lists.flat().map((t) => t.id));
   }, [loaded, tasksByProject, projectCount]);
+}
+
+const IS_MAC = navigator.userAgent.includes("Mac OS X");
+
+/** macOS でウィンドウがフルスクリーンかどうか（信号機ボタンが表示されない状態）を追跡する */
+function useFullscreen(): boolean {
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    if (!IS_MAC) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    try {
+      const win = getCurrentWindow();
+      const sync = () =>
+        win
+          .isFullscreen()
+          .then((v) => !disposed && setFullscreen(v))
+          .catch(() => {});
+      void sync();
+      win
+        .onResized(() => void sync())
+        .then((fn) => (disposed ? fn() : (unlisten = fn)))
+        .catch(() => {});
+    } catch {
+      // Tauri 外（ブラウザでの表示確認など）では何もしない
+    }
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+  return fullscreen;
 }
 
 function useShortcuts() {
@@ -93,14 +128,15 @@ function EmptyState() {
 export default function App() {
   const openTaskIds = useTabStore((s) => s.openTaskIds);
   const activeTaskId = useTabStore((s) => s.activeTaskId);
+  const fullscreen = useFullscreen();
   useStartup();
   useShortcuts();
 
   return (
-    <div className="app">
+    <div className={`app ${IS_MAC && !fullscreen ? "traffic-light-inset" : ""}`}>
       <Sidebar />
       <main className="main">
-        {openTaskIds.length > 0 && <TaskTabs />}
+        <TaskTabs />
         {openTaskIds.length === 0 && <EmptyState />}
         {openTaskIds.map((id) => (
           <div key={id} className="task-host" hidden={id !== activeTaskId}>

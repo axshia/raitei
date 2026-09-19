@@ -2,6 +2,7 @@
  * タスクタブバー（担当: WS-F）。
  * 実行中インジケータは agentStore.runningByTask を読むだけ（書き込まない）。
  * 中クリックでも閉じられる。ショートカット: ⌘1〜9 で n 番目、⌘⇧[ / ⌘⇧] で左右（App.tsx で登録）。
+ * ウィンドウのヘッダーを兼ねるため、タブが無いときも表示し、タブ以外の空き領域はドラッグでウィンドウを移動できる。
  */
 import { useProjectStore } from "../../store/projectStore";
 import { useTabStore } from "../../store/tabStore";
@@ -53,7 +54,7 @@ function Tab({ taskId, index }: { taskId: string; index: number }) {
 export function TaskTabs() {
   const openTaskIds = useTabStore((s) => s.openTaskIds);
   return (
-    <nav className="task-tabs" role="tablist">
+    <nav className="task-tabs" role="tablist" data-tauri-drag-region="deep">
       {openTaskIds.map((id, i) => (
         <Tab key={id} taskId={id} index={i} />
       ))}
