@@ -1,0 +1,8 @@
+{"type": "thread.started", "thread_id": "01a0b71b-1e7c-71a3-8b0d-a30edaea5764"}
+{"type": "item.completed", "item": {"id": "item_0", "type": "error", "message": "Under-development features enabled: chronicle. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Users/ryo/.codex/config.toml."}}
+{"type": "turn.started"}
+{"type": "item.completed", "item": {"id": "item_1", "type": "agent_message", "text": "I’ll run the command using the required Aburasashi workflow.\n"}}
+{"type": "item.started", "item": {"id": "item_3", "type": "command_execution", "command": "/bin/zsh -lc 'echo hi'", "aggregated_output": "", "exit_code": null, "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_3", "type": "command_execution", "command": "/bin/zsh -lc 'echo hi'", "aggregated_output": "hi\n", "exit_code": 0, "status": "completed"}}
+{"type": "item.completed", "item": {"id": "item_4", "type": "agent_message", "text": "done"}}
+{"type": "turn.completed", "usage": {"input_tokens": 76459, "cached_input_tokens": 63232, "cache_write_input_tokens": 0, "output_tokens": 293, "reasoning_output_tokens": 170}}
