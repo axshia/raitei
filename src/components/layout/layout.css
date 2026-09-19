@@ -17,6 +17,10 @@
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
+/* macOS の信号機ボタン（Overlay タイトルバー）と重ならないよう左を空ける。フルスクリーン中は外す */
+.traffic-light-inset .sidebar-header {
+  padding-left: var(--traffic-light-w);
+}
 .brand {
   flex: 1;
   font-weight: 700;

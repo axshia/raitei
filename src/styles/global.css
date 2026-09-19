@@ -54,7 +54,9 @@
   --fs: 13px;
 
   --sidebar-w: 264px;
-  --tabbar-h: 34px;
+  --tabbar-h: 38px;
+  /* macOS の信号機ボタン 3 つ分の幅（tauri.conf.json の trafficLightPosition と合わせる） */
+  --traffic-light-w: 80px;
   --subbar-h: 32px;
 
   color-scheme: dark;
