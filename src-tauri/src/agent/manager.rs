@@ -851,4 +851,90 @@ mod tests {
         );
         let _ = std::process::Command::new("/bin/kill").arg(h.read("child.pid").trim()).status();
     }
+
+    // ---- 実機の CLI を使う確認（手動実行: `cargo test --lib real_ -- --ignored --nocapture`） ----
+
+    /// 実機 CLI で「ツール実行中にキャンセル → 同じセッションを resume して会話が続く」ことを確かめる。
+    fn real_cancel_then_resume(agent: AgentKind, permission: PermissionLevel) {
+        let dir = tempfile::tempdir().unwrap();
+        let sink = Arc::new(VecSink::default());
+        let ctx = RunContext {
+            env: ShellEnv::resolve(),
+            store: Arc::new(Store::open_in_memory().unwrap()),
+            sink: sink.clone(),
+        };
+        let h = Harness {
+            bin: dir.path().to_path_buf(),
+            work: dir.path().to_path_buf(),
+            _dir: dir,
+            ctx,
+            sink,
+            manager: AgentManager::new(),
+        };
+        let mut task = h.task(agent, None);
+        task.permission = permission;
+        h.ctx.store.update_task(&task).unwrap();
+
+        let first = h
+            .start(
+                &task.id,
+                "Remember the codeword PINEAPPLE. Then run the shell command `sleep 30` and after it finishes reply DONE.",
+            )
+            .unwrap();
+        let saw_tool = h.sink.wait_until(180, |evs| {
+            evs.iter()
+                .any(|e| e.run_id == first.run_id && matches!(e.event, AgentEvent::ToolUse { .. }))
+        });
+        assert!(saw_tool, "ToolUse が来ない: {:#?}", h.sink.events());
+        let started = Instant::now();
+        h.manager.cancel(&task.id).unwrap();
+        h.sink.wait_finished(&first.run_id, 10);
+        println!("cancel → RunFinished: {:?}", started.elapsed());
+        assert!(matches!(
+            h.sink.run_events(&first.run_id).last(),
+            Some(AgentEvent::RunFinished { cancelled: true, .. })
+        ));
+        let sid = h.ctx.store.get_task(&task.id).unwrap().agent_session_id;
+        assert!(sid.is_some(), "session_id が保存されていない");
+
+        let second = h
+            .start(&task.id, "What codeword did I ask you to remember? Reply with only the codeword.")
+            .unwrap();
+        h.sink.wait_finished(&second.run_id, 180);
+        let events = h.sink.run_events(&second.run_id);
+        for e in &events {
+            println!("{}", serde_json::to_string(e).unwrap().chars().take(200).collect::<String>());
+        }
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, AgentEvent::SessionStarted { session_id, .. } if Some(session_id) == sid.as_ref())),
+            "resume したのに別のセッションになった"
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, AgentEvent::AssistantText { text } if text.to_uppercase().contains("PINEAPPLE"))),
+            "resume 後に会話が続いていない"
+        );
+        assert!(matches!(
+            events.last(),
+            Some(AgentEvent::RunFinished {
+                exit_code: Some(0),
+                cancelled: false,
+            })
+        ));
+    }
+
+    #[test]
+    #[ignore = "実機の claude CLI を呼ぶ（課金あり）"]
+    fn real_claude_cancel_then_resume() {
+        real_cancel_then_resume(AgentKind::Claude, PermissionLevel::Full);
+    }
+
+    #[test]
+    #[ignore = "実機の codex CLI を呼ぶ（課金あり）"]
+    fn real_codex_cancel_then_resume() {
+        real_cancel_then_resume(AgentKind::Codex, PermissionLevel::Safe);
+    }
 }
