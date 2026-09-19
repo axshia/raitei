@@ -1,0 +1,154 @@
+version: 1
+name: mvp-parallel
+description: raitei MVP を WS-A〜H で並列実装し、統合・ビルド検証・動作確認まで行う
+defaults:
+  agent: claude
+  effort: high
+  approval: full-access
+max_parallel: 8
+nodes:
+  ws-a:
+    title: WS-A shell_env / system
+    workspace: isolated
+    effort: medium
+    prompt: |
+      raitei（Tauri v2 + React/Vite + Rust の AIコーディング統合環境）の並列実装の一担当です。
+      まず docs/design.md 全体（特に §4〜§8）を読み、契約（型・command シグネチャ・イベント）に従ってください。
+      契約ファイル（models.rs, error.rs, */types.rs, src/api/types.ts 等）は原則変更しない。どうしても必要なら最小限にし、報告に明記する。
+      担当範囲外のファイルは編集しない（他担当と並列で作業しています）。
+      担当範囲のスタブ（NotImplemented / 仮実装）を実装に置き換え、Rust はユニットテストを書き、`cargo test`（src-tauri）と `pnpm build` が通ることを確認する。
+      こまめにコミットし、最後に必ず全作業をコミットする（push はしない）。
+      報告には、実装内容・契約からの逸脱・他担当への申し送り・未対応事項を書く。
+      担当: WS-A — `src-tauri/src/shell_env.rs`（GUI 起動時でもログインシェルの PATH を解決し、claude / codex / gh / git の絶対パスを検出）と `src-tauri/src/commands/system.rs`。
+  ws-b:
+    title: WS-B store / project / task
+    workspace: isolated
+    prompt: |
+      raitei（Tauri v2 + React/Vite + Rust の AIコーディング統合環境）の並列実装の一担当です。
+      まず docs/design.md 全体（特に §4〜§8）を読み、契約（型・command シグネチャ・イベント）に従ってください。
+      契約ファイルは原則変更しない。必要なら最小限にし報告に明記する。担当範囲外のファイルは編集しない（他担当と並列作業中。WS-C の git 関数はシグネチャに従って呼ぶだけ）。
+      スタブを実装に置き換え、ユニットテストを書き、`cargo test`（src-tauri）と `pnpm build` が通ることを確認する。こまめにコミットし最後に全作業をコミット（push しない）。
+      報告には、実装内容・契約からの逸脱・他担当への申し送り・未対応事項を書く。
+      担当: WS-B — `src-tauri/src/store/`（メモリ仮実装を SQLite 永続化に置き換え。アプリデータディレクトリに保存。マイグレーション含む）、`commands/project.rs`（既存 git リポジトリ登録／新規作成）、`commands/task.rs`（タスク = worktree + ブランチ + エージェントセッション の作成・一覧・削除）。
+  ws-c:
+    title: WS-C git / worktree / conflict
+    workspace: isolated
+    agent: codex
+    prompt: |
+      raitei（Tauri v2 + React/Vite + Rust の AIコーディング統合環境）の並列実装の一担当です。
+      まず docs/design.md 全体（特に §4〜§8）を読み、契約（型・command シグネチャ・イベント）に従ってください。
+      契約ファイルは原則変更しない。必要なら最小限にし報告に明記する。担当範囲外のファイルは編集しない（他担当と並列作業中）。
+      スタブを実装に置き換え、ユニットテスト（一時ディレクトリに実 git リポジトリを作って検証）を書き、`cargo test`（src-tauri）と `pnpm build` が通ることを確認する。こまめにコミットし最後に全作業をコミット（push しない）。
+      報告には、実装内容・契約からの逸脱・他担当への申し送り・未対応事項を書く。
+      担当: WS-C — `src-tauri/src/git/*`（types 以外: repo 操作、worktree 追加/一覧/削除、status、push、base 取り込み時のコンフリクト検出・競合ファイル一覧・ours/theirs 選択・手動解決済みマーク・コミット）と `commands/git.rs`。`request_agent_conflict_resolution` は WS-E の start_run をシグネチャどおり呼ぶだけ。
+  ws-d:
+    title: WS-D github (gh) / PR
+    workspace: isolated
+    agent: codex
+    prompt: |
+      raitei（Tauri v2 + React/Vite + Rust の AIコーディング統合環境）の並列実装の一担当です。
+      まず docs/design.md 全体（特に §4〜§8）を読み、契約（型・command シグネチャ・イベント）に従ってください。
+      契約ファイルは原則変更しない。必要なら最小限にし報告に明記する。担当範囲外のファイルは編集しない（他担当と並列作業中。WS-C の repo::push はシグネチャどおり呼ぶだけ）。
+      スタブを実装に置き換え、`gh` の JSON 出力のパースはサンプル JSON を使ったユニットテストで検証し、`cargo test`（src-tauri）と `pnpm build` が通ることを確認する。gh で実リポジトリ・PR を作成/マージ/変更しないこと（読み取りのみ可）。こまめにコミットし最後に全作業をコミット（push しない）。
+      報告には、実装内容・契約からの逸脱・他担当への申し送り・未対応事項を書く。
+      担当: WS-D — `src-tauri/src/github/*`（types 以外: gh ラッパー、PR 作成・マージ・状態取得（CI チェック、レビュー、mergeable、コンフリクト有無）のパース）と `commands/pr.rs`。
+  ws-e:
+    title: WS-E agent runner (claude / codex headless)
+    workspace: isolated
+    effort: xhigh
+    prompt: |
+      raitei（Tauri v2 + React/Vite + Rust の AIコーディング統合環境）の並列実装の一担当です。
+      まず docs/design.md 全体（特に §4.7 と §6）を読み、契約（AgentRunner trait・AgentEvent・イベント名）に従ってください。
+      契約ファイルは原則変更しない。必要なら最小限にし報告に明記する。担当範囲外のファイルは編集しない（他担当と並列作業中。WS-B の append_agent_event / set_task_agent_session はシグネチャどおり呼ぶだけ）。
+      スタブを実装に置き換え、`src-tauri/tests/fixtures/*.jsonl` を使ったイベント正規化のユニットテストを書き、`cargo test`（src-tauri）と `pnpm build` が通ることを確認する。
+      claude（`claude -p --output-format stream-json --verbose`、`--resume`）と codex（`codex exec --json`、`codex exec resume`）の実出力を短いプロンプトで実際に確認し（§9 の未確認事項を解消し、docs/design.md §9 に結果を追記してよい）、キャンセル（プロセス停止）と session_id 保存による会話継続を実装する。
+      こまめにコミットし最後に全作業をコミット（push しない）。報告には、実装内容・契約からの逸脱・他担当への申し送り・未対応事項を書く。
+      担当: WS-E — `src-tauri/src/agent/{claude,codex,manager}.rs`、`commands/agent.rs`、fixture。
+  ws-f:
+    title: WS-F UI shell / projects / tasks / worktrees
+    workspace: isolated
+    prompt: |
+      raitei（Tauri v2 + React/Vite + Rust の AIコーディング統合環境）の並列実装の一担当です。
+      まず docs/design.md 全体（特に §5〜§7）を読み、契約（src/api/ の型と invoke ラッパー・イベント）に従ってください。
+      契約ファイルは原則変更しない。必要なら最小限にし報告に明記する。担当範囲外のファイルは編集しない（他担当と並列作業中）。
+      開発者向けツールらしい、情報密度が高く落ち着いたダークテーマの UI にする。`pnpm build` が通ることを確認する。こまめにコミットし最後に全作業をコミット（push しない）。
+      報告には、実装内容・契約からの逸脱・他担当への申し送り（G/H の画面をどこに差し込むか等）・未対応事項を書く。
+      担当: WS-F — `App.tsx`, `styles/`, `components/layout/`（サイドバーのプロジェクト一覧、タスクのタブバー、タブ内のサブビュー切替：チャット / PR / コンフリクト / 変更）、`features/{projects,tasks,worktrees}/`（プロジェクト作成・登録、タスク作成＝worktree+ブランチ+エージェント種別選択、worktree 一覧・削除）、`store/{projectStore,tabStore}.ts`。チャット画面は features/chat、PR/コンフリクト画面は features/{pr,conflicts} のエクスポートを差し込む。
+  ws-g:
+    title: WS-G chat UI
+    workspace: isolated
+    prompt: |
+      raitei（Tauri v2 + React/Vite + Rust の AIコーディング統合環境）の並列実装の一担当です。
+      まず docs/design.md 全体（特に §6〜§7）を読み、契約（src/api/ の型、AgentEvent、agent://event）に従ってください。
+      契約ファイルは原則変更しない。必要なら最小限にし報告に明記する。担当範囲外のファイルは編集しない（他担当と並列作業中）。
+      `pnpm build` が通ることを確認する。こまめにコミットし最後に全作業をコミット（push しない）。報告には、実装内容・契約からの逸脱・他担当への申し送り・未対応事項を書く。
+      担当: WS-G — `features/chat/`（ヘッドレス claude / codex の出力を表示するチャット UI: ユーザー発言・アシスタント本文の Markdown 表示・ツール呼び出しと結果の折りたたみ表示・実行中インジケータ・キャンセル・エラー表示・履歴の復元・seq による重複排除）、`store/agentStore.ts`。
+  ws-h:
+    title: WS-H PR / conflict UI
+    workspace: isolated
+    prompt: |
+      raitei（Tauri v2 + React/Vite + Rust の AIコーディング統合環境）の並列実装の一担当です。
+      まず docs/design.md 全体（特に §5〜§7）を読み、契約（src/api/ の型と invoke ラッパー）に従ってください。
+      契約ファイルは原則変更しない。必要なら最小限にし報告に明記する。担当範囲外のファイルは編集しない（他担当と並列作業中）。
+      `pnpm build` が通ることを確認する。こまめにコミットし最後に全作業をコミット（push しない）。報告には、実装内容・契約からの逸脱・他担当への申し送り・未対応事項を書く。
+      担当: WS-H — `features/pr/`（PR 作成フォーム、PR 状態表示: CI チェック・レビュー・mergeable・コンフリクト有無、マージ操作と方式選択、更新）、`features/conflicts/`（base 取り込み→競合ファイル一覧→ファイルごとに ours/theirs 選択 or AI エージェントに解消依頼→コミット・push のフロー）、`store/prStore.ts`。
+  integrate:
+    title: Integrate
+    needs: [ws-a, ws-b, ws-c, ws-d, ws-e, ws-f, ws-g, ws-h]
+    effort: xhigh
+    prompt: |
+      raitei の並列実装（WS-A〜H）を、この worktree に統合してください。docs/design.md を先に読むこと。
+      マージするブランチ:
+      - A: {{needs.ws-a.branch}}
+      - B: {{needs.ws-b.branch}}
+      - C: {{needs.ws-c.branch}}
+      - D: {{needs.ws-d.branch}}
+      - E: {{needs.ws-e.branch}}
+      - F: {{needs.ws-f.branch}}
+      - G: {{needs.ws-g.branch}}
+      - H: {{needs.ws-h.branch}}
+      各担当の報告（契約からの逸脱・申し送りを含む）:
+      {{needs.ws-a.report}}
+      ---
+      {{needs.ws-b.report}}
+      ---
+      {{needs.ws-c.report}}
+      ---
+      {{needs.ws-d.report}}
+      ---
+      {{needs.ws-e.report}}
+      ---
+      {{needs.ws-f.report}}
+      ---
+      {{needs.ws-g.report}}
+      ---
+      {{needs.ws-h.report}}
+
+      順にマージし、コンフリクトは両方の意図を保って解消する。契約逸脱や申し送りを突き合わせ、モジュール間の結線（command 登録、イベント、ストア呼び出し、画面の差し込み）を完成させる。
+      `cd src-tauri && cargo test`、`pnpm install && pnpm build`、`pnpm tauri build` が通るまで修正し、コミットする（push しない）。
+      報告には、マージ結果・解消したコンフリクト・結線で直した点・残課題を書く。
+  build-check:
+    title: Build & test gate
+    type: gate
+    gate: command
+    needs: [integrate]
+    run: pnpm install --frozen-lockfile && (cd src-tauri && cargo test) && pnpm tauri build
+  verify:
+    title: E2E verify & fix
+    needs: [build-check]
+    effort: xhigh
+    prompt: |
+      統合済みの raitei を、MVP 要件に照らして実際に動かして検証し、見つけた不具合を直してください。docs/design.md を先に読むこと。
+      MVP 要件: (1) プロジェクト作成 (2) 1 プロジェクトで複数 git worktree による並列開発 (3) タスク単位のタブ表示 (4) PR 作成 (5) PR マージ (6) PR コンフリクト解消 (7) PR 状態確認 (8) ローカル claude / codex をヘッドレスで接続し開発できる。
+      検証方法:
+      - 一時ディレクトリにローカル git リポジトリを作り、Rust のコマンド層（統合テストやテスト用バイナリで可）を通してプロジェクト登録→タスク（worktree）複数作成→claude と codex それぞれに短い開発指示を送りイベントが正規化されて保存・継続できること→ローカルでの base 取り込みとコンフリクト検出・ours/theirs 解消、を確認する。
+      - PR 系は GitHub 上に実リポジトリや PR を作らないこと（外部に見える操作は禁止）。gh の読み取り系と、PR 系コマンドの引数組み立て・パースをテストで確認する。
+      - `pnpm tauri dev` でアプリを起動し、画面の各導線が契約どおり command を呼べることを確認する（スクリーンショットが撮れない場合はその旨を記録）。
+      直したら `cd src-tauri && cargo test`、`pnpm build`、`pnpm tauri build` を再確認してコミットする（push しない）。
+      報告には、要件ごとの検証結果（確認済み / 未確認とその理由）、直した不具合、既知の問題、ユーザーが手動で確認すべき手順（特に実 GitHub での PR 作成・マージ・コンフリクト解消）を書く。
+  final-check:
+    title: Final build gate
+    type: gate
+    gate: command
+    needs: [verify]
+    run: pnpm install --frozen-lockfile && (cd src-tauri && cargo test) && pnpm tauri build
