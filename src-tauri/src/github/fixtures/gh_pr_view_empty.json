@@ -1,0 +1,14 @@
+{
+  "number": 7,
+  "url": "https://github.example/team/project/pull/7",
+  "title": "Draft without checks",
+  "state": "OPEN",
+  "isDraft": true,
+  "headRefName": "feature/draft",
+  "baseRefName": "main",
+  "mergeable": "UNKNOWN",
+  "mergeStateStatus": "DRAFT",
+  "reviewDecision": "",
+  "reviews": [],
+  "statusCheckRollup": null
+}

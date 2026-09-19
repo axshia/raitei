@@ -10,6 +10,9 @@ pub mod gh;
 pub mod parse;
 pub mod types;
 
+#[cfg(all(test, unix))]
+pub(crate) mod test_support;
+
 pub use types::*;
 
 pub const PR_JSON_FIELDS: &str = "number,url,title,state,isDraft,headRefName,baseRefName,mergeable,mergeStateStatus,reviewDecision,reviews,statusCheckRollup";

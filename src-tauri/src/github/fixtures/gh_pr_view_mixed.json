@@ -1,0 +1,25 @@
+{
+  "number": 42,
+  "url": "https://github.example/team/project/pull/42",
+  "title": "PR 状態の表示",
+  "state": "OPEN",
+  "isDraft": false,
+  "headRefName": "feature/pr-status",
+  "baseRefName": "main",
+  "mergeable": "CONFLICTING",
+  "mergeStateStatus": "DIRTY",
+  "reviewDecision": "CHANGES_REQUESTED",
+  "reviews": [
+    {"author": {"login": "reviewer"}, "state": "CHANGES_REQUESTED", "submittedAt": "2026-09-19T00:00:00Z"},
+    {"author": null, "state": "COMMENTED", "submittedAt": null}
+  ],
+  "statusCheckRollup": [
+    {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "SUCCESS", "detailsUrl": "https://github.example/team/project/actions/runs/1"},
+    {"__typename": "CheckRun", "name": "test", "status": "IN_PROGRESS", "conclusion": "", "detailsUrl": ""},
+    {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "NEUTRAL", "detailsUrl": null},
+    {"__typename": "CheckRun", "name": "optional", "status": "COMPLETED", "conclusion": "SKIPPED", "detailsUrl": ""},
+    {"__typename": "CheckRun", "name": "cancelled", "status": "COMPLETED", "conclusion": "CANCELLED", "detailsUrl": ""},
+    {"__typename": "StatusContext", "context": "external CI", "state": "ERROR", "targetUrl": "https://ci.example/42"},
+    {"__typename": "StatusContext", "context": "deploy", "state": "PENDING", "targetUrl": ""}
+  ]
+}
