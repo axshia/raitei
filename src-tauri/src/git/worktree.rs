@@ -5,8 +5,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::error::AppResult;
-use crate::shell_env::ShellEnv;
+use crate::error::{AppError, AppResult};
+use crate::shell_env::{run, ShellEnv};
 
 use super::types::WorktreeInfo;
 
@@ -62,6 +62,39 @@ pub fn remove_worktree(env: &ShellEnv, repo: &Path, path: &Path, force: bool) ->
     super::git(env, repo, &args)?;
     super::git(env, repo, &["worktree", "prune"])?;
     Ok(())
+}
+
+/// `git branch -d` が受け付けるか（マージ済みか）を、ブランチを消さずに調べる。
+///
+/// git と同じく、upstream があればそこへ、無ければリポジトリの HEAD へマージ済みかを見る。
+pub fn is_branch_merged(env: &ShellEnv, repo: &Path, branch: &str) -> AppResult<bool> {
+    super::repo::validate_branch(branch)?;
+    let upstream = run(
+        env,
+        "git",
+        &["rev-parse", "--verify", "--quiet", &format!("{branch}@{{upstream}}")],
+        repo,
+    )?;
+    let reference = if upstream.success() {
+        upstream.stdout.trim().to_string()
+    } else {
+        "HEAD".to_string()
+    };
+    let local = format!("refs/heads/{branch}");
+    let out = run(
+        env,
+        "git",
+        &["merge-base", "--is-ancestor", &local, &reference],
+        repo,
+    )?;
+    match out.status {
+        0 => Ok(true),
+        1 => Ok(false),
+        _ => Err(AppError::Git(format!(
+            "ブランチ {branch} のマージ状態を確認できません: {}",
+            out.stderr.trim()
+        ))),
+    }
 }
 
 pub fn delete_branch(env: &ShellEnv, repo: &Path, branch: &str, force: bool) -> AppResult<()> {

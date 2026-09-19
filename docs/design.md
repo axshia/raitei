@@ -67,6 +67,8 @@ command 層は薄いオーケストレーションだけを持ち、ロジック
 | `src/commands/pr.rs` | PR | WS-D | |
 | `src/commands/agent.rs` | エージェント | WS-E | |
 | `tests/fixtures/*.jsonl` | 実機で採取した CLI 出力 | WS-E | 追加自由 |
+| `tests/mvp_flow.rs`（+ `tests/common/`） | IPC 経由の結合テスト（MVP 要件 1〜8 の command 層） | 共通 | 追加自由 |
+| `tests/real_cli.rs` | 実機の claude / codex / gh を使う確認（`--ignored`） | 共通 | 追加自由 |
 
 「凍結」のファイルを変える必要が出た場合は、Rust（`models.rs` など）と TS（`src/api/types.ts`）を同じコミットで更新し、他担当に知らせます。
 
@@ -75,6 +77,7 @@ command 層は薄いオーケストレーションだけを持ち、ロジック
 - すべての command は `async fn` で `AppResult<T>` を返す。外部コマンドを伴う処理は `state::blocking(move || ...)` で包み、メインスレッドを塞がない
 - 外部コマンドは必ず `shell_env::ShellEnv` 経由で起動する（`std::process::Command::new` を直接使わない）
 - 出力パースは副作用のない `parse_*` 関数に分け、ユニットテストを書く。git の結合テストは `tempfile` で一時リポジトリを作って行う
+- command の結合テストは `tests/mvp_flow.rs` に置く。`tauri::test` の MockRuntime に `invoke_handler()`（本番と同じ command 一覧）を登録し、フロントと同じ command 名・camelCase 引数で呼ぶ。gh は偽のスクリプト、push 先は一時ディレクトリの bare リポジトリにし、GitHub へは書き込まない
 - シリアライズは struct が camelCase、`AgentEvent` の中身だけ snake_case（`#[serde(tag = "type", rename_all = "snake_case")]`）
 - エラーは `{ kind, message }` の JSON でフロントに渡る。`kind` は `notImplemented | notFound | invalidInput | git | gh | agent | command | db | io`
 - 仮実装は `AppError::NotImplemented("モジュール::関数")` を返す。`todo!()` / `unimplemented!()` は使わない
@@ -315,5 +318,6 @@ src/
 - 確認済み（WS-E）: `claude --resume <存在しない ID>` は init を出さず、`subtype: "error_during_execution"` と `errors: [..]` を持つ result 行（`result` フィールドなし）だけを出して終了コード 1 で終わる。Result.text には `errors` を入れる（fixture: `claude_resume_not_found.jsonl`）。resume した run でセッションが確立しないまま異常終了した場合、manager は「会話をリセットしてから送り直す」よう促す `error` を追加で出す。session_id は自動では消さない
 - 確認済み（WS-E）: ツール実行中にキャンセル（プロセスグループへの SIGTERM）しても、claude / codex とも同じ session_id で resume して会話を続けられる。claude は SIGTERM から終了まで約 2 秒かかり（終了コード 143）、codex はすぐ終わる。確認用テストは `agent::manager::tests::real_*`（`cargo test --lib real_ -- --ignored`）
 - 確認済み（WS-E）: codex の `file_change` も `item.started` / `item.completed` の対で届く。`model_reasoning_summary` を有効にすると `reasoning` item が出る（fixture: `codex_file_change.jsonl`）。API エラーは `error` と `turn.failed` の両方で届き、message はエラー JSON の文字列なので内側の `error.message` を取り出して表示する（fixture: `codex_turn_failed.jsonl`）
+- 確認済み（2026-09-19, 結合検証）: 安全モード（claude `acceptEdits` / codex `workspace-write`）でエージェントが `git add` / `git commit` できるかは、各 CLI の権限設定に依存する。この環境では claude は単体の `git add` / `git commit` が通り、`&&` でつないだ複合コマンドは承認待ちとして拒否された。codex は linked worktree でも `git add` / `git commit` が通った。raitei 自体にはコミット操作が無いため、コミットできない環境ではフル権限に切り替えるか、ターミナルでコミットする必要がある（確認用: `cargo test --test real_cli probe -- --ignored --nocapture`）
 - 未実施: 長時間 run の出力量制限（`agent_events` 肥大化対策）。MVP では制限しない
 - 未実施: worktree 配置先の設定 UI。MVP は第 4.5 節の規約に固定

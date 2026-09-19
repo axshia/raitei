@@ -1,7 +1,7 @@
 //! タスク command（担当: WS-B）。
 //!
 //! タスク作成 = 入力検証 → worktree パス決定 → `git worktree add` → DB 登録（失敗時は worktree を戻す）。
-//! タスク削除 = 実行中エージェント停止 → (任意) worktree 削除 / ブランチ削除 → DB 削除。
+//! タスク削除 = (ブランチ削除を伴うなら) マージ済みか確認 → 実行中エージェント停止 → (任意) worktree 削除 / ブランチ削除 → DB 削除。
 //!
 //! command 関数は薄いラッパーで、処理本体は `AppState` だけに依存する `*_impl` 関数に置く（テスト用）。
 
@@ -137,6 +137,13 @@ pub(crate) fn delete_task_impl(s: &AppState, task_id: &str, options: &DeleteTask
     }
     let project = s.store.get_project(&t.project_id)?;
     let repo = PathBuf::from(&project.repo_path);
+    // worktree を消した後で `git branch -d` が失敗すると、worktree の無いタスクが残る。先に確かめる。
+    if options.delete_branch && !options.force && !git::worktree::is_branch_merged(&s.env, &repo, &t.branch)? {
+        return Err(AppError::InvalidInput(format!(
+            "ブランチ {} は未マージのため削除できません。「強制」を選ぶか、ブランチを残してください",
+            t.branch
+        )));
+    }
     s.agents.cancel(&t.id)?;
     // 停止中のエージェントが worktree へ書き込む間に削除しないよう、止まるまで待つ。
     if !wait_until_agent_stopped(s, &t.id, AGENT_STOP_TIMEOUT) {
@@ -398,6 +405,46 @@ mod tests {
         assert!(!s.agents.run_state(&t.id).running, "エージェント停止前に削除している");
         assert!(!Path::new(&t.worktree_path).exists());
         assert!(matches!(s.store.get_task(&t.id), Err(AppError::NotFound(_))));
+    }
+
+    #[test]
+    fn delete_task_keeps_everything_when_unmerged_branch_cannot_be_deleted() {
+        let (s, _tmp, p) = setup();
+        let t = create_task_impl(&s, req(&p, "feat/unmerged")).unwrap();
+        let wt = PathBuf::from(&t.worktree_path);
+        std::fs::write(wt.join("x.txt"), "x").unwrap();
+        test_git(&s, &wt, &["add", "x.txt"]);
+        test_git(&s, &wt, &["commit", "-q", "-m", "unmerged"]);
+
+        let opts = DeleteTaskOptions {
+            remove_worktree: true,
+            delete_branch: true,
+            force: false,
+        };
+        let err = delete_task_impl(&s, &t.id, &opts).unwrap_err();
+        assert!(matches!(err, AppError::InvalidInput(_)), "{err:?}");
+        assert!(wt.is_dir(), "ブランチを消せないのに worktree を先に消している");
+        assert_eq!(s.store.get_task(&t.id).unwrap(), t);
+
+        // 強制なら消せる
+        delete_task_impl(&s, &t.id, &DeleteTaskOptions { force: true, ..opts }).unwrap();
+        assert!(!wt.exists());
+        assert!(matches!(s.store.get_task(&t.id), Err(AppError::NotFound(_))));
+    }
+
+    #[test]
+    fn delete_task_removes_merged_branch_without_force() {
+        let (s, _tmp, p) = setup();
+        let t = create_task_impl(&s, req(&p, "feat/merged")).unwrap();
+        let opts = DeleteTaskOptions {
+            remove_worktree: true,
+            delete_branch: true,
+            force: false,
+        };
+        delete_task_impl(&s, &t.id, &opts).unwrap();
+        assert!(!PathBuf::from(&t.worktree_path).exists());
+        let branches = test_git(&s, Path::new(&p.repo_path), &["branch", "--list", "feat/merged"]);
+        assert!(branches.trim().is_empty());
     }
 
     #[test]

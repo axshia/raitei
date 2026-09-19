@@ -11,6 +11,8 @@ pnpm install
 pnpm tauri dev      # 起動
 pnpm tauri build    # .app / .dmg を生成
 cd src-tauri && cargo test
+# 実機の claude / codex / gh（読み取りのみ）を使う確認。API 利用料がかかる
+cd src-tauri && cargo test --test real_cli -- --ignored --nocapture --test-threads=1
 ```
 
 前提: macOS (Apple Silicon)、Rust stable、Node.js、pnpm、`git`、`gh`（ログイン済み）、`claude` / `codex` CLI。

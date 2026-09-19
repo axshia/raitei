@@ -41,3 +41,5 @@ strip = true
 
 [dev-dependencies]
 tempfile = "3.27.0"
+# IPC 経由の結合テスト（tests/）で MockRuntime を使う
+tauri = { version = "2", features = ["test"] }

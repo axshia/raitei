@@ -36,35 +36,40 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            commands::system::get_environment,
-            commands::project::list_projects,
-            commands::project::add_project,
-            commands::project::create_project,
-            commands::project::remove_project,
-            commands::task::list_tasks,
-            commands::task::get_task,
-            commands::task::create_task,
-            commands::task::update_task,
-            commands::task::delete_task,
-            commands::git::list_worktrees,
-            commands::git::get_git_status,
-            commands::git::start_base_merge,
-            commands::git::get_conflict_state,
-            commands::git::read_conflict_file,
-            commands::git::resolve_conflict_file,
-            commands::git::abort_base_merge,
-            commands::git::complete_base_merge,
-            commands::git::request_agent_conflict_resolution,
-            commands::pr::get_pull_request,
-            commands::pr::create_pull_request,
-            commands::pr::merge_pull_request,
-            commands::agent::send_agent_message,
-            commands::agent::cancel_agent_run,
-            commands::agent::get_agent_history,
-            commands::agent::get_agent_run_state,
-            commands::agent::reset_agent_session,
-        ])
+        .invoke_handler(invoke_handler())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// フロントから呼べる command の一覧。アプリ本体と IPC 経由の結合テスト（`tests/`）で共有する。
+pub fn invoke_handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
+    tauri::generate_handler![
+        commands::system::get_environment,
+        commands::project::list_projects,
+        commands::project::add_project,
+        commands::project::create_project,
+        commands::project::remove_project,
+        commands::task::list_tasks,
+        commands::task::get_task,
+        commands::task::create_task,
+        commands::task::update_task,
+        commands::task::delete_task,
+        commands::git::list_worktrees,
+        commands::git::get_git_status,
+        commands::git::start_base_merge,
+        commands::git::get_conflict_state,
+        commands::git::read_conflict_file,
+        commands::git::resolve_conflict_file,
+        commands::git::abort_base_merge,
+        commands::git::complete_base_merge,
+        commands::git::request_agent_conflict_resolution,
+        commands::pr::get_pull_request,
+        commands::pr::create_pull_request,
+        commands::pr::merge_pull_request,
+        commands::agent::send_agent_message,
+        commands::agent::cancel_agent_run,
+        commands::agent::get_agent_history,
+        commands::agent::get_agent_run_state,
+        commands::agent::reset_agent_session,
+    ]
 }

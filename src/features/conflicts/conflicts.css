@@ -21,6 +21,10 @@
   outline: 1px solid var(--accent);
 }
 
+/* .wsh-list li（横並び・中央揃え）より優先し、内容を横幅いっぱいに縦へ並べる */
+.wsh-list li.cf-file {
+  align-items: stretch;
+}
 .cf-file {
   border: 1px solid var(--border);
   border-radius: var(--radius);

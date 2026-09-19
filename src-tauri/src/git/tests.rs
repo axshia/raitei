@@ -459,3 +459,20 @@ fn unmerged_parser_and_agent_prompt() {
     assert!(prompt.contains("origin/main") && prompt.contains("- a"));
     assert!(prompt.contains("git add") && prompt.contains("コミットはしない"));
 }
+
+#[test]
+fn branch_merged_check_matches_git_branch_d() {
+    let f = Fixture::new();
+    f.remote();
+    let task = f.task();
+    assert!(worktree::is_branch_merged(&f.env, &f.repo, "task").unwrap());
+    f.commit_file(&task, "t.txt", b"t");
+    // upstream が無ければ HEAD（main）基準で未マージ
+    assert!(!worktree::is_branch_merged(&f.env, &f.repo, "task").unwrap());
+    // push して upstream を持てば、git と同じく upstream 基準でマージ済み
+    repo::push(&f.env, &task, "task", true).unwrap();
+    assert!(worktree::is_branch_merged(&f.env, &f.repo, "task").unwrap());
+    worktree::remove_worktree(&f.env, &f.repo, &task, false).unwrap();
+    worktree::delete_branch(&f.env, &f.repo, "task", false).unwrap();
+    assert!(worktree::is_branch_merged(&f.env, &f.repo, "task").is_err());
+}
