@@ -3,55 +3,141 @@
 use std::path::{Path, PathBuf};
 
 use crate::error::{AppError, AppResult};
-use crate::shell_env::ShellEnv;
+use crate::shell_env::{run, ShellEnv};
 
 use super::git;
 
 /// `path` が git 作業ツリー内ならトップレベルの絶対パスを返す。
 pub fn repo_root(env: &ShellEnv, path: &Path) -> AppResult<PathBuf> {
     let out = git(env, path, &["rev-parse", "--show-toplevel"])?;
-    Ok(PathBuf::from(out.trim()))
+    Ok(PathBuf::from(out.trim_end_matches('\n')))
 }
 
-/// 新規ディレクトリに `git init -b main` し、空の初回コミットを作る。
-/// 既に存在して空でないディレクトリなら `AppError::InvalidInput`。
-pub fn init_repo(_env: &ShellEnv, _path: &Path, _default_branch: &str) -> AppResult<()> {
-    Err(AppError::NotImplemented("git::repo::init_repo"))
+/// 空のディレクトリに指定ブランチと初回コミットを作る。既存データは変更しない。
+pub fn init_repo(env: &ShellEnv, path: &Path, default_branch: &str) -> AppResult<()> {
+    validate_branch(default_branch)?;
+    if path.exists() && (!path.is_dir() || std::fs::read_dir(path)?.next().is_some()) {
+        return Err(AppError::InvalidInput(
+            "作成先は空のディレクトリを指定してください".into(),
+        ));
+    }
+    std::fs::create_dir_all(path)?;
+    git(env, path, &["init", "-b", default_branch])?;
+    git(
+        env,
+        path,
+        &["commit", "--allow-empty", "-m", "Initial commit"],
+    )?;
+    Ok(())
 }
 
-/// 既定ブランチを推定する: `origin/HEAD` → `main` / `master` の存在 → 現在のブランチ。
+/// origin/HEAD → main / master → 現在のブランチ。
 pub fn default_branch(env: &ShellEnv, repo: &Path) -> AppResult<String> {
-    current_branch(env, repo).map(|b| b.unwrap_or_else(|| "main".into()))
+    repo_root(env, repo)?;
+    let remote = run(
+        env,
+        "git",
+        &["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
+        repo,
+    )?;
+    if remote.success() {
+        if let Some(branch) = remote.stdout.trim().strip_prefix("refs/remotes/origin/") {
+            return Ok(branch.to_string());
+        }
+    }
+    for branch in ["main", "master"] {
+        if branch_exists(env, repo, branch)? {
+            return Ok(branch.to_string());
+        }
+    }
+    current_branch(env, repo)?.ok_or_else(|| {
+        AppError::InvalidInput("既定ブランチを判定できません（detached HEAD）".into())
+    })
 }
 
-/// 現在のブランチ。detached なら None。
 pub fn current_branch(env: &ShellEnv, repo: &Path) -> AppResult<Option<String>> {
     let out = git(env, repo, &["branch", "--show-current"])?;
     let b = out.trim();
-    Ok(if b.is_empty() { None } else { Some(b.to_string()) })
+    Ok(if b.is_empty() {
+        None
+    } else {
+        Some(b.to_string())
+    })
 }
 
-/// `origin` リモートがあるか。
-pub fn has_origin(_env: &ShellEnv, _repo: &Path) -> AppResult<bool> {
-    Err(AppError::NotImplemented("git::repo::has_origin"))
+pub fn has_origin(env: &ShellEnv, repo: &Path) -> AppResult<bool> {
+    repo_root(env, repo)?;
+    let out = run(env, "git", &["remote", "get-url", "origin"], repo)?;
+    if out.success() {
+        return Ok(true);
+    }
+    // Distinguish an absent origin from an invalid repository/configuration.
+    let remotes = git(env, repo, &["remote"])?;
+    if remotes.lines().any(|r| r == "origin") {
+        return Err(AppError::Git(out.stderr));
+    }
+    Ok(false)
 }
 
-/// `git fetch origin <branch>`。
-pub fn fetch(_env: &ShellEnv, _repo: &Path, _branch: &str) -> AppResult<()> {
-    Err(AppError::NotImplemented("git::repo::fetch"))
+pub fn fetch(env: &ShellEnv, repo: &Path, branch: &str) -> AppResult<()> {
+    validate_branch(branch)?;
+    // An explicit destination also supports clones with a restricted fetch refspec.
+    let refspec = format!("+refs/heads/{branch}:refs/remotes/origin/{branch}");
+    git(env, repo, &["fetch", "origin", &refspec])?;
+    Ok(())
 }
 
-/// `git push [-u] origin <branch>`。
-pub fn push(_env: &ShellEnv, _worktree: &Path, _branch: &str, _set_upstream: bool) -> AppResult<()> {
-    Err(AppError::NotImplemented("git::repo::push"))
+pub fn push(env: &ShellEnv, worktree: &Path, branch: &str, set_upstream: bool) -> AppResult<()> {
+    validate_branch(branch)?;
+    let mut args = vec!["push"];
+    if set_upstream {
+        args.push("-u");
+    }
+    // Fully qualify the ref to avoid ambiguity with a tag of the same name.
+    let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
+    args.extend(["origin", &refspec]);
+    git(env, worktree, &args)?;
+    Ok(())
 }
 
-/// ブランチ名として妥当か（`git check-ref-format --branch` 相当の簡易検証）。
+pub(crate) fn branch_exists(env: &ShellEnv, repo: &Path, branch: &str) -> AppResult<bool> {
+    let reference = format!("refs/heads/{branch}");
+    let out = run(
+        env,
+        "git",
+        &["show-ref", "--verify", "--quiet", &reference],
+        repo,
+    )?;
+    match out.status {
+        0 => Ok(true),
+        1 => Ok(false),
+        _ => Err(AppError::Git(out.stderr)),
+    }
+}
+
+pub(crate) fn validate_branch(name: &str) -> AppResult<()> {
+    if is_valid_branch_name(name) {
+        Ok(())
+    } else {
+        Err(AppError::InvalidInput(format!(
+            "ブランチ名が不正です: {name}"
+        )))
+    }
+}
+
+/// シェル/オプションや refspec ではなく、リテラルのブランチ名だけを許可する。
 pub fn is_valid_branch_name(name: &str) -> bool {
     !name.is_empty()
+        && name != "HEAD"
+        && name != "@"
         && !name.starts_with('-')
+        && !name.ends_with('.')
         && !name.contains("..")
-        && !name.contains(char::is_whitespace)
-        && !name.ends_with('/')
-        && !name.ends_with(".lock")
+        && !name.contains("@{")
+        && !name
+            .chars()
+            .any(|c| c.is_control() || c.is_whitespace() || "~^:?*[\\".contains(c))
+        && name
+            .split('/')
+            .all(|part| !part.is_empty() && !part.starts_with('.') && !part.ends_with(".lock"))
 }
