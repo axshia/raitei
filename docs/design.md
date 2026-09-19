@@ -305,7 +305,10 @@ src/
 
 ## 9. 未決事項
 
-- 未確認: `codex exec resume` が `--json` と `-c sandbox_mode` を受け付けるか。help には `-c` がある。`--json` は WS-E が実機で確認する
-- 未確認: claude の `--permission-mode acceptEdits` で Bash ツールが拒否されたときの挙動。結果の `permission_denials` を UI に出すかは WS-E / G で判断する
+- 確認済み（2026-09-19, codex-cli 0.155.1, WS-E）: `codex exec resume --json --skip-git-repo-check -c sandbox_mode="workspace-write" <thread_id> -` はそのまま受け付けられ、同じ `thread_id` の `thread.started` から始まる JSONL が出て会話が続く。存在しない thread_id を指定すると JSONL を 1 行も出さず、stderr に `Error: thread/resume: ... no rollout found ...` を出して終了コード 1 で終わる（fixture: `codex_resume.jsonl`）
+- 確認済み（claude 2.1.277, WS-E）: `--permission-mode acceptEdits` で承認が必要な Bash（例: `curl`）は実行されない。その呼び出しの `tool_result` が `is_error: true`（本文 "This command requires approval"）で返り、`result` 行は `subtype: "success"` のまま `permission_denials: [{tool_name, tool_use_id, tool_input}]` を持つ。raitei は Result の直前に、拒否された操作の一覧と「権限レベルを変更して送り直す」案内を `error` イベントで出す。UI は通常の error 表示でよい（fixture: `claude_permission_denied.jsonl`）
+- 確認済み（WS-E）: `claude --resume <存在しない ID>` は init を出さず、`subtype: "error_during_execution"` と `errors: [..]` を持つ result 行（`result` フィールドなし）だけを出して終了コード 1 で終わる。Result.text には `errors` を入れる（fixture: `claude_resume_not_found.jsonl`）。resume した run でセッションが確立しないまま異常終了した場合、manager は「会話をリセットしてから送り直す」よう促す `error` を追加で出す。session_id は自動では消さない
+- 確認済み（WS-E）: ツール実行中にキャンセル（プロセスグループへの SIGTERM）しても、claude / codex とも同じ session_id で resume して会話を続けられる。claude は SIGTERM から終了まで約 2 秒かかり（終了コード 143）、codex はすぐ終わる。確認用テストは `agent::manager::tests::real_*`（`cargo test --lib real_ -- --ignored`）
+- 確認済み（WS-E）: codex の `file_change` も `item.started` / `item.completed` の対で届く。`model_reasoning_summary` を有効にすると `reasoning` item が出る（fixture: `codex_file_change.jsonl`）。API エラーは `error` と `turn.failed` の両方で届き、message はエラー JSON の文字列なので内側の `error.message` を取り出して表示する（fixture: `codex_turn_failed.jsonl`）
 - 未実施: 長時間 run の出力量制限（`agent_events` 肥大化対策）。MVP では制限しない
 - 未実施: worktree 配置先の設定 UI。MVP は第 4.5 節の規約に固定
