@@ -1,0 +1,59 @@
+/* プロジェクト（サイドバー内）（担当: WS-F） */
+.project {
+  margin-bottom: 2px;
+}
+.project-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px 0 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+.project-header:hover {
+  background: var(--bg-hover);
+}
+.caret {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.caret::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid var(--fg-subtle);
+  border-bottom: 1.5px solid var(--fg-subtle);
+  transform: rotate(-45deg);
+  transition: transform 0.1s;
+}
+.caret.open::before {
+  transform: translateY(-2px) rotate(45deg);
+}
+.project-name {
+  flex: 1;
+}
+.project-count {
+  font-weight: 400;
+  font-size: var(--fs-xs);
+  padding-right: 2px;
+}
+.project-actions {
+  display: none;
+  align-items: center;
+}
+.project-header:hover .project-actions,
+.project-actions:has([aria-expanded="true"]) {
+  display: inline-flex;
+}
+.project-header:hover .project-count {
+  display: none;
+}
+.project-path {
+  padding: 0 12px 2px 26px;
+  font-size: 10px;
+}
