@@ -1,19 +1,20 @@
 /**
  * PR 状態のポーリング（担当: WS-H）。
- * タブがアクティブかつウィンドウが表示中の間だけ 30 秒ごとに silent で取得する。
- * 非アクティブなタブは display:none で残るため、activeTaskId で判定する。
+ * PR サブビューが表示中（タブがアクティブかつ PR を選択中）で、ウィンドウが表示中の間だけ 30 秒ごとに silent で取得する。
+ * 非アクティブなタブや一度開いたサブビューは hidden でマウントされたままなので、useIsSubViewVisible で判定する。
+ * 表示に戻ったときは、前回取得から 30 秒近く経っていればすぐに取り直す。
  */
 import { useEffect } from "react";
 import { usePrStore } from "../../store/prStore";
-import { useTabStore } from "../../store/tabStore";
+import { useIsSubViewVisible } from "../../store/tabStore";
 
 export const PR_POLL_INTERVAL_MS = 30_000;
 
 export function usePrPolling(taskId: string) {
-  const active = useTabStore((s) => s.activeTaskId === taskId);
+  const visible = useIsSubViewVisible(taskId, "pr");
 
   useEffect(() => {
-    if (!active) return;
+    if (!visible) return;
     const { refreshPr } = usePrStore.getState();
 
     const refreshIfStale = () => {
@@ -34,5 +35,5 @@ export function usePrPolling(taskId: string) {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", refreshIfStale);
     };
-  }, [taskId, active]);
+  }, [taskId, visible]);
 }

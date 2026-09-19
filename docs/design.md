@@ -253,8 +253,8 @@ interface AgentEventEnvelope {
 src/
   api/            契約（凍結）: types.ts と invoke ラッパー
   store/
-    projectStore.ts  プロジェクト・タスク一覧（WS-F）
-    tabStore.ts      開いているタブ・右パネル選択（WS-F）
+    projectStore.ts  プロジェクト・タスク一覧・環境情報（WS-F）
+    tabStore.ts      開いているタブ・タブ内サブビュー選択（WS-F）
     agentStore.ts    会話イベント・実行中フラグ（WS-G）
     prStore.ts       PR 状態・コンフリクト状態（WS-H）
   styles/global.css  デザイントークン・レイアウト（WS-F）
@@ -263,27 +263,32 @@ src/
   features/
     projects/     AddProjectButtons, ProjectSection（WS-F）
     tasks/        TaskList, NewTaskForm, TaskView（WS-F）
-    worktrees/    WorktreePanel（WS-F）
+    worktrees/    WorktreePanel（worktree 一覧ダイアログ）, ChangesPanel（WS-F）
     chat/         ChatPanel ほか（WS-G）
     pr/           PrPanel ほか（WS-H）
     conflicts/    ConflictPanel ほか（WS-H）
 ```
 
-画面構成:
+画面構成（WS-F の実装で、右パネル方式からタブ内サブビュー方式に変更）:
 
 ```
 +------------+-----------------------------------------------+
 | raitei     | [● task A] [task B] [task C]           タブ    |
-| [追加]     +------------------------------+----------------+
-| project 1  |  チャット（ChatPanel）         | [PR][衝突][WT] |
-|   task A   |   user / assistant / tool     |  PrPanel       |
-|   task B   |   ...                         |  ConflictPanel |
-|   + 新規   |  [入力欄           ][送信]    |  WorktreePanel |
-| project 2  |                              |                |
-+------------+------------------------------+----------------+
+| [追加]     +-----------------------------------------------+
+| project 1  | タイトル / agent / 権限 / PR / branch <- base  |
+|   task A   | [チャット][PR][コンフリクト][変更]  ⌃1〜4      |
+|   task B   +-----------------------------------------------+
+|   + 新規   |  選択中のサブビュー                            |
+| project 2  |  ChatPanel / PrPanel / ConflictPanel /         |
+|            |  ChangesPanel                                  |
+| git gh ... |                                               |
++------------+-----------------------------------------------+
 ```
 
-- 非アクティブなタブもアンマウントせず `display: none` で保持する（入力中テキストやスクロール位置を失わないため）
+- worktree 一覧（WorktreePanel）はサイドバーのプロジェクトメニューから開くダイアログ。タスクの作業ツリー状態は「変更」サブビュー（ChangesPanel）に出す
+- 非アクティブなタブもアンマウントせず `display: none` で保持する（入力中テキストやスクロール位置を失わないため）。サブビューも一度表示したら hidden で保持する
+- 非表示中に処理を止めたいパネル（PR のポーリングなど）は `useIsSubViewVisible(taskId, view)` で表示中かを判定する
+- 他ストアから画面を切り替えるときは `useTabStore.getState().setSubView(taskId, "conflicts")` を呼ぶ（旧名 `setSidePanel` / `SidePanelKind` は別名として残す）
 - 各パネルは `taskId` だけを props で受け、状態は自分のストアから読む。パネル同士で props を渡し合わない
 - ストア間の連携は `getState()` 経由で行う（例: PR 作成後に `useProjectStore.getState().upsertTask()`）
 - CSS は `global.css` のトークン（`--bg` など）を使い、feature 固有のスタイルは各 feature ディレクトリ内の CSS ファイルに置く

@@ -1,6 +1,6 @@
 /**
  * PR パネル（担当: WS-H）: PR 未作成なら作成フォーム、作成済みなら状態（CI / レビュー / mergeable / コンフリクト）とマージ操作。
- * タブがアクティブな間は 30 秒ごとに状態をポーリングする（usePrPolling）。
+ * PR サブビューが表示されている間は 30 秒ごとに状態をポーリングする（usePrPolling）。
  */
 import { useEffect, useState } from "react";
 import { useProjectStore } from "../../store/projectStore";

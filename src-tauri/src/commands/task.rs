@@ -6,6 +6,7 @@
 //! command 関数は薄いラッパーで、処理本体は `AppState` だけに依存する `*_impl` 関数に置く（テスト用）。
 
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use tauri::State;
 
@@ -137,6 +138,12 @@ pub(crate) fn delete_task_impl(s: &AppState, task_id: &str, options: &DeleteTask
     let project = s.store.get_project(&t.project_id)?;
     let repo = PathBuf::from(&project.repo_path);
     s.agents.cancel(&t.id)?;
+    // 停止中のエージェントが worktree へ書き込む間に削除しないよう、止まるまで待つ。
+    if !wait_until_agent_stopped(s, &t.id, AGENT_STOP_TIMEOUT) {
+        return Err(AppError::Agent(
+            "エージェントが停止しないため削除を中止しました。少し待ってからやり直してください".into(),
+        ));
+    }
     if options.remove_worktree {
         let wt = PathBuf::from(&t.worktree_path);
         if wt.exists() {
@@ -150,6 +157,21 @@ pub(crate) fn delete_task_impl(s: &AppState, task_id: &str, options: &DeleteTask
         git::worktree::delete_branch(&s.env, &repo, &t.branch, options.force)?;
     }
     s.store.delete_task(&t.id)
+}
+
+/// キャンセル後にエージェントの停止を待つ上限。AgentManager は SIGTERM から 3 秒で SIGKILL に切り替える。
+const AGENT_STOP_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// タスクの run が終わるまで待つ。`timeout` 内に終わらなければ false。
+fn wait_until_agent_stopped(s: &AppState, task_id: &str, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    while s.agents.run_state(task_id).running {
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    true
 }
 
 // ---- テスト ----
@@ -229,11 +251,7 @@ mod tests {
     #[test]
     fn create_and_delete_task_with_worktree() {
         let (s, _tmp, p) = setup();
-        let t = match create_task_impl(&s, req(&p, " feat/login ")) {
-            // WS-C の add_worktree が未実装の間はスキップ（結合後に有効になる）
-            Err(AppError::NotImplemented(_)) => return,
-            r => r.unwrap(),
-        };
+        let t = create_task_impl(&s, req(&p, " feat/login ")).unwrap();
         assert_eq!(t.branch, "feat/login");
         assert_eq!(t.title, "feat/login", "空タイトルはブランチ名で補う");
         assert_eq!(t.base_branch, "main");
@@ -244,7 +262,7 @@ mod tests {
         assert_eq!(head.trim(), "feat/login");
         assert_eq!(s.store.list_tasks(&p.id).unwrap(), vec![t.clone()]);
 
-        match delete_task_impl(
+        delete_task_impl(
             &s,
             &t.id,
             &DeleteTaskOptions {
@@ -252,10 +270,8 @@ mod tests {
                 delete_branch: true,
                 force: true,
             },
-        ) {
-            Err(AppError::NotImplemented(_)) => return,
-            r => r.unwrap(),
-        }
+        )
+        .unwrap();
         assert!(!expected.exists());
         let branches = test_git(&s, Path::new(&p.repo_path), &["branch", "--list", "feat/login"]);
         assert!(branches.trim().is_empty());
@@ -342,6 +358,46 @@ mod tests {
             delete_task_impl(&s, &t.id, &DeleteTaskOptions::default()),
             Err(AppError::NotFound(_))
         ));
+    }
+
+    #[test]
+    fn delete_task_waits_for_running_agent_to_stop() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (base, tmp, p) = setup();
+        // SIGTERM を受けてから 1 秒後に終わる偽の claude を PATH の先頭に置く
+        let bin = tmp.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let started = tmp.path().join("started");
+        let script = format!(
+            "#!/bin/sh\ncat > /dev/null\ntrap 'sleep 1; exit 143' TERM\ntouch '{}'\nwhile :; do sleep 0.1; done\n",
+            started.display()
+        );
+        let fake = bin.join("claude");
+        std::fs::write(&fake, script).unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let s = AppState {
+            env: crate::shell_env::ShellEnv::from_path(format!("{}:{}", bin.display(), base.env.path)),
+            ..base
+        };
+
+        let t = create_task_impl(&s, req(&p, "feat/agent")).unwrap();
+        s.agents.start_run(&s.run_context(), &t, "作業して".into()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !started.exists() {
+            assert!(Instant::now() < deadline, "偽の claude が起動しない");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        let opts = DeleteTaskOptions {
+            remove_worktree: true,
+            delete_branch: true,
+            force: true,
+        };
+        delete_task_impl(&s, &t.id, &opts).unwrap();
+        assert!(!s.agents.run_state(&t.id).running, "エージェント停止前に削除している");
+        assert!(!Path::new(&t.worktree_path).exists());
+        assert!(matches!(s.store.get_task(&t.id), Err(AppError::NotFound(_))));
     }
 
     #[test]

@@ -1,17 +1,21 @@
 //! gh コマンド実行（担当: WS-D）。
 
 use std::path::Path;
+use std::time::Duration;
 
 use crate::error::{AppError, AppResult};
-use crate::shell_env::{run, CmdOutput, ShellEnv};
+use crate::shell_env::{run, run_with_timeout, CmdOutput, ShellEnv};
 
 use super::parse::{parse_created_pr_number, parse_pr_view};
 use super::types::{MergeMethod, PullRequestStatus};
 use super::PR_JSON_FIELDS;
 
-/// `gh auth status` が成功するか。
+/// `gh auth status` の待ち時間の上限。ネットワーク不調でも環境情報の取得を止めないため。
+const AUTH_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// `gh auth status` が成功するか。タイムアウトした場合は未認証とみなす。
 pub fn is_authenticated(env: &ShellEnv) -> bool {
-    run(env, "gh", &["auth", "status"], Path::new("/"))
+    run_with_timeout(env, "gh", &["auth", "status"], Path::new("/"), AUTH_STATUS_TIMEOUT)
         .map(|o| o.success())
         .unwrap_or(false)
 }

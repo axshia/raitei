@@ -7,6 +7,7 @@
 //!    または AI に依頼（コマンド層がエージェントへプロンプト送信）→ 完了後 markResolved
 //! 3. `commit_merge`: 未解決が無いことを確認して `git commit --no-edit`
 //! 4. push は `repo::push`
+//!
 //! 中止は `abort_merge`（`git merge --abort`）。
 
 use std::path::{Component, Path, PathBuf};

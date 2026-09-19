@@ -289,11 +289,7 @@ mod tests {
             parent_dir: tmp.path().display().to_string(),
             name: "fresh".into(),
         };
-        let p = match create_project_impl(&s, &req) {
-            // WS-C の init_repo が未実装の間はスキップ（結合後に有効になる）
-            Err(AppError::NotImplemented(_)) => return,
-            r => r.unwrap(),
-        };
+        let p = create_project_impl(&s, &req).unwrap();
         assert_eq!(p.name, "fresh");
         assert_eq!(p.default_branch, "main");
         let root = crate::git::repo::repo_root(&s.env, Path::new(&p.repo_path)).unwrap();
