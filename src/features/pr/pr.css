@@ -1,0 +1,203 @@
+/* PR / コンフリクトパネル共通スタイル（担当: WS-H）。global.css のトークンだけを参照する。 */
+
+.wsh-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wsh-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wsh-toolbar .wsh-spacer {
+  flex: 1;
+}
+
+.wsh-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wsh-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--fg-muted);
+  text-transform: none;
+}
+.wsh-section-title .wsh-spacer {
+  flex: 1;
+}
+
+.wsh-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wsh-field > span {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.wsh-field textarea {
+  resize: vertical;
+  min-height: 96px;
+  font-family: var(--font);
+}
+.wsh-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.wsh-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+button.wsh-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b1220;
+  font-weight: 600;
+}
+button.wsh-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+button.wsh-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-align: left;
+}
+button.wsh-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.wsh-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.tone-ok {
+  color: var(--ok);
+}
+.tone-warn {
+  color: var(--warn);
+}
+.tone-danger {
+  color: var(--danger);
+}
+.tone-muted {
+  color: var(--fg-muted);
+}
+.tone-accent {
+  color: var(--accent);
+}
+
+.wsh-notice {
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+.wsh-notice.success {
+  border-color: var(--ok);
+}
+.wsh-notice.error {
+  border-color: var(--danger);
+  color: var(--danger);
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.wsh-notice.error > span {
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wsh-notice.error button {
+  padding: 0 6px;
+}
+
+.wsh-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wsh-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.wsh-list .wsh-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wsh-kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  align-items: center;
+}
+.wsh-kv > dt {
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+.wsh-kv > dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.wsh-mono {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.wsh-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-hover);
+  display: flex;
+  overflow: hidden;
+}
+.wsh-progress > span {
+  height: 100%;
+}
+
+.wsh-confirm {
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wsh-confirm ul {
+  margin: 0;
+  padding-left: 18px;
+}

@@ -1,0 +1,80 @@
+/* コンフリクト解消パネル（担当: WS-H）。共通部品は ../pr/pr.css を使う。 */
+
+.cf-steps {
+  display: flex;
+  gap: 4px;
+  font-size: 11px;
+}
+.cf-steps > span {
+  flex: 1;
+  text-align: center;
+  padding: 3px 0;
+  border-radius: var(--radius);
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+}
+.cf-steps > span.done {
+  color: var(--ok);
+}
+.cf-steps > span.current {
+  color: var(--fg);
+  outline: 1px solid var(--accent);
+}
+
+.cf-file {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg);
+}
+.cf-file-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.cf-file-head .cf-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.cf-file .wsh-actions button {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
+.cf-view-tabs {
+  display: flex;
+  gap: 2px;
+}
+.cf-view-tabs button {
+  font-size: 11px;
+  padding: 1px 8px;
+}
+.cf-view-tabs button.active {
+  border-color: var(--accent);
+}
+.cf-code {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre;
+}
+.cf-code .cf-marker {
+  color: var(--warn);
+  font-weight: 600;
+}
