@@ -5,16 +5,21 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
 use crate::shell_env::ShellEnv;
 
 use super::types::WorktreeInfo;
 
 /// タスクの worktree パスを決める（純粋関数）。
 pub fn worktree_path_for(repo: &Path, branch: &str) -> PathBuf {
-    let name = repo.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = repo
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let parent = repo.parent().unwrap_or(repo);
-    parent.join(format!("{name}.worktrees")).join(branch.replace('/', "-"))
+    parent
+        .join(format!("{name}.worktrees"))
+        .join(branch.replace('/', "-"))
 }
 
 /// `git worktree list --porcelain` 一覧。
@@ -24,23 +29,54 @@ pub fn list_worktrees(env: &ShellEnv, repo: &Path) -> AppResult<Vec<WorktreeInfo
 }
 
 /// `git worktree add -b <branch> <path> <base>`（branch が既存なら `-b` なしで checkout）。
-pub fn add_worktree(_env: &ShellEnv, _repo: &Path, _path: &Path, _branch: &str, _base: &str) -> AppResult<()> {
-    Err(AppError::NotImplemented("git::worktree::add_worktree"))
+pub fn add_worktree(
+    env: &ShellEnv,
+    repo: &Path,
+    path: &Path,
+    branch: &str,
+    base: &str,
+) -> AppResult<()> {
+    super::repo::validate_branch(branch)?;
+    super::repo::validate_branch(base)?;
+    let path = path.to_string_lossy();
+    if super::repo::branch_exists(env, repo, branch)? {
+        super::git(env, repo, &["worktree", "add", "--", &path, branch])?;
+    } else {
+        super::git(
+            env,
+            repo,
+            &["worktree", "add", "-b", branch, "--", &path, base],
+        )?;
+    }
+    Ok(())
 }
 
-/// `git worktree remove [--force] <path>` → `git worktree prune`。
-pub fn remove_worktree(_env: &ShellEnv, _repo: &Path, _path: &Path, _force: bool) -> AppResult<()> {
-    Err(AppError::NotImplemented("git::worktree::remove_worktree"))
+/// 未コミット変更のある worktree は force 指定時だけ削除する。
+pub fn remove_worktree(env: &ShellEnv, repo: &Path, path: &Path, force: bool) -> AppResult<()> {
+    let path = path.to_string_lossy();
+    let mut args = vec!["worktree", "remove"];
+    if force {
+        args.push("--force");
+    }
+    args.extend(["--", &path]);
+    super::git(env, repo, &args)?;
+    super::git(env, repo, &["worktree", "prune"])?;
+    Ok(())
 }
 
-/// `git branch -d|-D <branch>`。
-pub fn delete_branch(_env: &ShellEnv, _repo: &Path, _branch: &str, _force: bool) -> AppResult<()> {
-    Err(AppError::NotImplemented("git::worktree::delete_branch"))
+pub fn delete_branch(env: &ShellEnv, repo: &Path, branch: &str, force: bool) -> AppResult<()> {
+    super::repo::validate_branch(branch)?;
+    super::git(
+        env,
+        repo,
+        &["branch", if force { "-D" } else { "-d" }, "--", branch],
+    )?;
+    Ok(())
 }
 
 /// porcelain 出力のパース（純粋関数）。
 ///
-/// 仮実装: `worktree` / `HEAD` / `branch` / `bare` / `detached` のみ対応。WS-C が locked/prunable を含め完成させテストを書く。
+/// Git の引用付きパスと locked/prunable の理由付き行にも対応する。
 pub fn parse_worktree_porcelain(s: &str) -> Vec<WorktreeInfo> {
     let mut out: Vec<WorktreeInfo> = Vec::new();
     for block in s.split("\n\n") {
@@ -48,7 +84,7 @@ pub fn parse_worktree_porcelain(s: &str) -> Vec<WorktreeInfo> {
         let mut seen = false;
         for line in block.lines() {
             if let Some(p) = line.strip_prefix("worktree ") {
-                wt.path = p.to_string();
+                wt.path = super::parse_quoted_path(p);
                 seen = true;
             } else if let Some(h) = line.strip_prefix("HEAD ") {
                 wt.head = Some(h.to_string());
@@ -58,6 +94,10 @@ pub fn parse_worktree_porcelain(s: &str) -> Vec<WorktreeInfo> {
                 wt.is_bare = true;
             } else if line == "detached" {
                 wt.is_detached = true;
+            } else if line == "locked" || line.starts_with("locked ") {
+                wt.locked = true;
+            } else if line == "prunable" || line.starts_with("prunable ") {
+                wt.prunable = true;
             }
         }
         if seen {
@@ -82,7 +122,8 @@ mod tests {
 
     #[test]
     fn parse_basic() {
-        let s = "worktree /a\nHEAD 111\nbranch refs/heads/main\n\nworktree /b\nHEAD 222\ndetached\n";
+        let s =
+            "worktree /a\nHEAD 111\nbranch refs/heads/main\n\nworktree /b\nHEAD 222\ndetached\n";
         let v = parse_worktree_porcelain(s);
         assert_eq!(v.len(), 2);
         assert!(v[0].is_main);
