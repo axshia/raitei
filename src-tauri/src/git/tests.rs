@@ -214,3 +214,248 @@ fn porcelain_parsers_cover_headers_flags_and_malformed_lines() {
     assert_eq!(trees[1].path, "/with\tspace");
     assert!(trees[1].locked && trees[1].prunable && trees[1].is_detached);
 }
+
+use super::conflict;
+use super::types::{ConflictKind, ConflictResolution, ConflictState};
+
+fn conflicting(f: &Fixture, name: &str) -> PathBuf {
+    f.commit_file(&f.repo, name, b"original\n");
+    let task = f.task();
+    f.commit_file(&task, name, b"ours\n");
+    f.commit_file(&f.repo, name, b"theirs\n");
+    task
+}
+
+#[test]
+fn conflict_read_choose_each_side_and_commit() {
+    for (resolution, expected) in [
+        (ConflictResolution::Ours, "ours\n"),
+        (ConflictResolution::Theirs, "theirs\n"),
+    ] {
+        let f = Fixture::new();
+        let name = "日本語 [x] space\t\n.txt";
+        let task = conflicting(&f, name);
+        let cs = conflict::merge_base_into(&f.env, &task, "main").unwrap();
+        assert!(cs.merge_in_progress && !cs.ready_to_commit);
+        assert_eq!(cs.base_ref.as_deref(), Some("main"));
+        assert_eq!(cs.files[0].path, name);
+        assert_eq!(cs.files[0].kind, ConflictKind::BothModified);
+        assert!(status::status(&f.env, &task).unwrap().merge_in_progress);
+        assert_eq!(status::status(&f.env, &task).unwrap().files[0].status, "UU");
+        assert_eq!(conflict::conflict_state(&f.env, &task).unwrap(), cs);
+        let content = conflict::read_conflict_file(&f.env, &task, name).unwrap();
+        assert_eq!(content.ours.as_deref(), Some("ours\n"));
+        assert_eq!(content.theirs.as_deref(), Some("theirs\n"));
+        assert!(content.working.unwrap().contains("<<<<<<<"));
+        assert!(matches!(
+            conflict::commit_merge(&f.env, &task),
+            Err(crate::error::AppError::InvalidInput(_))
+        ));
+        assert!(conflict::merge_base_into(&f.env, &task, "main").is_err());
+        let ready = conflict::resolve_file(&f.env, &task, name, resolution).unwrap();
+        assert!(ready.ready_to_commit && ready.files.is_empty());
+        assert_eq!(std::fs::read_to_string(task.join(name)).unwrap(), expected);
+        conflict::commit_merge(&f.env, &task).unwrap();
+        assert_eq!(
+            conflict::conflict_state(&f.env, &task).unwrap(),
+            ConflictState::default()
+        );
+        assert_eq!(
+            f.git(&task, &["rev-list", "--parents", "-n", "1", "HEAD"])
+                .split_whitespace()
+                .count(),
+            3
+        );
+        assert_eq!(
+            conflict::conflict_state(&f.env, &f.repo).unwrap(),
+            ConflictState::default()
+        );
+    }
+}
+
+#[test]
+fn manual_resolution_and_abort_preserve_original_head() {
+    let f = Fixture::new();
+    let task = conflicting(&f, "file");
+    let head = f.git(&task, &["rev-parse", "HEAD"]);
+    conflict::merge_base_into(&f.env, &task, "main").unwrap();
+    std::fs::write(task.join("file"), "combined\n").unwrap();
+    let cs =
+        conflict::resolve_file(&f.env, &task, "file", ConflictResolution::MarkResolved).unwrap();
+    assert!(cs.ready_to_commit);
+    conflict::abort_merge(&f.env, &task).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(task.join("file")).unwrap(),
+        "ours\n"
+    );
+    assert_eq!(head, f.git(&task, &["rev-parse", "HEAD"]));
+    assert!(
+        !conflict::conflict_state(&f.env, &task)
+            .unwrap()
+            .merge_in_progress
+    );
+    conflict::abort_merge(&f.env, &task).unwrap();
+    conflict::merge_base_into(&f.env, &task, "main").unwrap();
+    std::fs::write(task.join("file"), "combined\n").unwrap();
+    conflict::resolve_file(&f.env, &task, "file", ConflictResolution::MarkResolved).unwrap();
+    conflict::commit_merge(&f.env, &task).unwrap();
+    assert_eq!(f.git(&task, &["show", "HEAD:file"]), "combined\n");
+}
+
+#[test]
+fn delete_modify_conflicts_support_deleted_and_present_sides() {
+    for deleted_by_us in [true, false] {
+        for choose_deleted in [true, false] {
+            let f = Fixture::new();
+            f.commit_file(&f.repo, "file", b"original\n");
+            let task = f.task();
+            let (deleted, modified) = if deleted_by_us {
+                (&task, &f.repo)
+            } else {
+                (&f.repo, &task)
+            };
+            f.git(deleted, &["rm", "file"]);
+            f.git(deleted, &["commit", "-m", "delete"]);
+            f.commit_file(modified, "file", b"modified\n");
+            let cs = conflict::merge_base_into(&f.env, &task, "main").unwrap();
+            assert_eq!(
+                cs.files[0].kind,
+                if deleted_by_us {
+                    ConflictKind::DeletedByUs
+                } else {
+                    ConflictKind::DeletedByThem
+                }
+            );
+            let content = conflict::read_conflict_file(&f.env, &task, "file").unwrap();
+            assert_eq!(content.ours.is_none(), deleted_by_us);
+            assert_eq!(content.theirs.is_none(), !deleted_by_us);
+            let resolution = if choose_deleted == deleted_by_us {
+                ConflictResolution::Ours
+            } else {
+                ConflictResolution::Theirs
+            };
+            assert!(
+                conflict::resolve_file(&f.env, &task, "file", resolution)
+                    .unwrap()
+                    .ready_to_commit
+            );
+            assert_eq!(task.join("file").exists(), !choose_deleted);
+            conflict::commit_merge(&f.env, &task).unwrap();
+        }
+    }
+}
+
+#[test]
+fn manual_deletion_binary_and_add_add_conflicts() {
+    let f = Fixture::new();
+    let task = f.task();
+    f.commit_file(&task, "binary", &[0, 1, 255]);
+    f.commit_file(&f.repo, "binary", &[0, 2, 254]);
+    let cs = conflict::merge_base_into(&f.env, &task, "main").unwrap();
+    assert_eq!(cs.files[0].kind, ConflictKind::BothAdded);
+    let content = conflict::read_conflict_file(&f.env, &task, "binary").unwrap();
+    assert!(content.working.is_none() && content.ours.is_none() && content.theirs.is_none());
+    std::fs::remove_file(task.join("binary")).unwrap();
+    assert!(conflict::read_conflict_file(&f.env, &task, "binary")
+        .unwrap()
+        .working
+        .is_none());
+    assert!(
+        conflict::resolve_file(&f.env, &task, "binary", ConflictResolution::MarkResolved)
+            .unwrap()
+            .ready_to_commit
+    );
+    conflict::commit_merge(&f.env, &task).unwrap();
+    assert!(!task.join("binary").exists());
+}
+
+#[test]
+fn clean_merge_no_op_retry_and_invalid_input() {
+    let f = Fixture::new();
+    let task = f.task();
+    assert_eq!(
+        conflict::merge_base_into(&f.env, &task, "main").unwrap(),
+        ConflictState::default()
+    );
+    conflict::commit_merge(&f.env, &task).unwrap();
+    assert!(conflict::merge_base_into(&f.env, &task, "missing").is_err());
+    assert!(conflict::merge_base_into(&f.env, &task, "--help").is_err());
+    f.commit_file(&f.repo, "base", b"new\n");
+    let cs = conflict::merge_base_into(&f.env, &task, "main").unwrap();
+    assert!(cs.merge_in_progress && cs.ready_to_commit && cs.files.is_empty());
+    conflict::commit_merge(&f.env, &task).unwrap();
+    let head = f.git(&task, &["rev-parse", "HEAD"]);
+    std::fs::write(task.join("unrelated"), b"do not commit").unwrap();
+    f.git(&task, &["add", "unrelated"]);
+    conflict::commit_merge(&f.env, &task).unwrap();
+    assert_eq!(head, f.git(&task, &["rev-parse", "HEAD"]));
+    assert!(conflict::merge_base_into(&f.env, &task, "main").is_err());
+    assert!(task.join("unrelated").exists());
+}
+
+#[test]
+fn remote_base_merge_fetches_new_commit_and_pushes_result() {
+    let f = Fixture::new();
+    let remote = f.remote();
+    let task = f.task();
+    f.commit_file(&f.repo, "remote-change", b"remote\n");
+    repo::push(&f.env, &f.repo, "main", false).unwrap();
+    // Reset local main so only origin/main contains the change.
+    f.git(&f.repo, &["reset", "--hard", "HEAD~1"]);
+    let cs = conflict::merge_base_into(&f.env, &task, "main").unwrap();
+    assert_eq!(cs.base_ref.as_deref(), Some("origin/main"));
+    assert!(cs.ready_to_commit);
+    assert!(task.join("remote-change").exists());
+    conflict::commit_merge(&f.env, &task).unwrap();
+    repo::push(&f.env, &task, "task", true).unwrap();
+    assert_eq!(
+        f.git(&remote, &["rev-parse", "task"]),
+        f.git(&task, &["rev-parse", "HEAD"])
+    );
+}
+
+#[test]
+fn conflict_operations_reject_paths_outside_unmerged_set() {
+    let f = Fixture::new();
+    let task = conflicting(&f, "file");
+    conflict::merge_base_into(&f.env, &task, "main").unwrap();
+    for path in [
+        "",
+        "../file",
+        "/etc/passwd",
+        ":(glob)*",
+        "*",
+        "untracked",
+        "file\0",
+    ] {
+        assert!(
+            conflict::read_conflict_file(&f.env, &task, path).is_err(),
+            "{path:?}"
+        );
+        assert!(
+            conflict::resolve_file(&f.env, &task, path, ConflictResolution::Ours).is_err(),
+            "{path:?}"
+        );
+    }
+    // Reading a replacement symlink must not disclose its target.
+    std::fs::remove_file(task.join("file")).unwrap();
+    std::os::unix::fs::symlink(f.repo.join("file"), task.join("file")).unwrap();
+    assert!(conflict::read_conflict_file(&f.env, &task, "file")
+        .unwrap()
+        .working
+        .is_none());
+    conflict::abort_merge(&f.env, &task).unwrap();
+}
+
+#[test]
+fn unmerged_parser_and_agent_prompt() {
+    let files = conflict::parse_unmerged(
+        "UU a\nAA b\nDU c\nUD d\nAU e\nUA f\nDD g\n M skip\n日\nUU \"tab\\tname\"\n",
+    );
+    assert_eq!(files.len(), 8);
+    assert_eq!(files[7].path, "tab\tname");
+    assert_eq!(files[4].kind, ConflictKind::Other);
+    let prompt = conflict::build_agent_prompt("origin/main", &files);
+    assert!(prompt.contains("origin/main") && prompt.contains("- a"));
+    assert!(prompt.contains("git add") && prompt.contains("コミットはしない"));
+}
