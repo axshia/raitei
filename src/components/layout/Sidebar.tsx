@@ -1,22 +1,53 @@
-/** 左サイドバー（担当: WS-F）: 環境ステータス + プロジェクト一覧 + 各プロジェクトのタスク一覧 */
+/** 左サイドバー（担当: WS-F）: 環境ステータス + プロジェクト追加 + プロジェクト一覧（各プロジェクトのタスク一覧） */
 import { useProjectStore } from "../../store/projectStore";
 import { ProjectSection } from "../../features/projects/ProjectSection";
 import { AddProjectButtons } from "../../features/projects/AddProjectButtons";
+import { EnvStatus } from "./EnvStatus";
 
 export function Sidebar() {
-  const { projects, error, clearError } = useProjectStore();
+  const projects = useProjectStore((s) => s.projects);
+  const loaded = useProjectStore((s) => s.loaded);
+  const error = useProjectStore((s) => s.error);
+  const clearError = useProjectStore((s) => s.clearError);
+
   return (
     <aside className="sidebar">
-      <h3 style={{ margin: "4px 0 12px" }}>raitei</h3>
-      <AddProjectButtons />
+      <header className="sidebar-header">
+        <span className="brand">raitei</span>
+        <AddProjectButtons />
+      </header>
+
+      <div className="sidebar-body">
+        <div className="sidebar-caption section-title">
+          <span>プロジェクト</span>
+          <span className="subtle">{projects.length || ""}</span>
+        </div>
+        {!loaded && (
+          <div className="sidebar-note muted">
+            <span className="spinner" /> 読み込み中…
+          </div>
+        )}
+        {loaded && projects.length === 0 && (
+          <div className="sidebar-note muted">
+            まだプロジェクトがありません。右上の「追加」から既存の git リポジトリを登録するか、新規作成してください。
+          </div>
+        )}
+        {projects.map((p) => (
+          <ProjectSection key={p.id} project={p} />
+        ))}
+      </div>
+
       {error && (
-        <p className="error" onClick={clearError} title="クリックで閉じる">
-          {error.message}
-        </p>
+        <div className="banner danger sidebar-error">
+          <span className="grow selectable">
+            <b>{error.kind}</b> {error.message}
+          </span>
+          <button className="ghost icon sm" onClick={clearError} aria-label="閉じる">
+            ×
+          </button>
+        </div>
       )}
-      {projects.map((p) => (
-        <ProjectSection key={p.id} project={p} />
-      ))}
+      <EnvStatus />
     </aside>
   );
 }
