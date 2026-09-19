@@ -129,31 +129,20 @@
   border-color: var(--accent);
 }
 
-/* サブビュー本体: パネルは高さいっぱいの flex column に置かれる */
+/* サブビュー本体: パネルのルート要素は高さいっぱい（flex: 1）に置かれる。余白はパネル側で付ける */
 .subview-body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: auto;
 }
 .subview-body[hidden] {
   display: none;
 }
 .subview-body > * {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
-}
-/* PR / コンフリクトはフォーム中心のパネルなので、ラッパー側でスクロールと余白を与える */
-.subview-pr,
-.subview-conflicts {
-  overflow: auto;
-}
-.subview-pr > *,
-.subview-conflicts > * {
-  flex: 0 0 auto;
-  min-height: auto;
-  padding: 12px 16px;
 }
 
 /* ---------- ダイアログ内フォーム ---------- */
@@ -216,4 +205,8 @@
 .check.disabled {
   opacity: 0.45;
   cursor: default;
+}
+.choice input,
+.check input {
+  flex-shrink: 0;
 }

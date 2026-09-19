@@ -13,6 +13,7 @@ import { ConfirmDialog } from "../../components/layout/ConfirmDialog";
 import { TaskList } from "../tasks/TaskList";
 import { NewTaskDialog } from "../tasks/NewTaskForm";
 import { WorktreeDialog } from "../worktrees/WorktreePanel";
+import { shortenHome } from "../tasks/branch";
 
 type Dialog = "newTask" | "worktrees" | "remove" | null;
 
@@ -36,7 +37,7 @@ export function ProjectSection({ project }: { project: Project }) {
           toggle(project.id);
         }}
       >
-        <span className={`caret ${collapsed ? "" : "open"}`}>▸</span>
+        <span className={`caret ${collapsed ? "" : "open"}`} />
         <span className="project-name truncate">{project.name}</span>
         <span className="project-count subtle">{taskCount || ""}</span>
         <span className="project-actions" onClick={(e) => e.stopPropagation()}>
@@ -65,7 +66,7 @@ export function ProjectSection({ project }: { project: Project }) {
 
       {!collapsed && (
         <>
-          <div className="project-path subtle mono truncate">{project.repoPath}</div>
+          <div className="project-path subtle mono truncate">{shortenHome(project.repoPath)}</div>
           <TaskList projectId={project.id} onNewTask={() => setDialog("newTask")} />
         </>
       )}

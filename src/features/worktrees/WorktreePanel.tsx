@@ -12,6 +12,8 @@ import { DeleteTaskDialog } from "../tasks/DeleteTaskDialog";
 import { shortenHome } from "../tasks/branch";
 import "./worktrees.css";
 
+const NO_TASKS: Task[] = [];
+
 function Flags({ wt }: { wt: WorktreeInfo }) {
   return (
     <>
@@ -25,7 +27,7 @@ function Flags({ wt }: { wt: WorktreeInfo }) {
 }
 
 export function WorktreeList({ project, onOpenTask }: { project: Project; onOpenTask?(): void }) {
-  const tasks = useProjectStore((s) => s.tasksByProject[project.id] ?? []);
+  const tasks = useProjectStore((s) => s.tasksByProject[project.id] ?? NO_TASKS);
   const openTask = useTabStore((s) => s.openTask);
   const [items, setItems] = useState<WorktreeInfo[] | null>(null);
   const [error, setError] = useState<AppError | null>(null);
@@ -81,13 +83,15 @@ export function WorktreeList({ project, onOpenTask }: { project: Project; onOpen
               const task = taskFor(wt);
               return (
                 <tr key={wt.path}>
-                  <td className="wt-main">
+                  <td>
+                    <div className="wt-main">
                     <div className="toolbar">
                       <span className="mono truncate">{wt.branch ?? "(detached)"}</span>
                       <Flags wt={wt} />
                     </div>
                     <div className="mono subtle truncate selectable" title={wt.path}>
                       {shortenHome(wt.path)}
+                    </div>
                     </div>
                   </td>
                   <td className="mono muted">{wt.head?.slice(0, 7) ?? "—"}</td>
